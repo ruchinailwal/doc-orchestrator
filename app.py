@@ -25,7 +25,7 @@ if uploaded_file and user_query:
     if st.button("Extract Data"):
         with st.spinner("Extracting data with Gemini..."):
             doc_text = extract_text(uploaded_file)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-2.0-flash")
             prompt = f"""
             Document: {doc_text[:4000]}
             User Question: {user_query}
