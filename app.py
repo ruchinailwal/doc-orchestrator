@@ -4,206 +4,138 @@ import json
 import requests
 from google import genai
 
-# Gemini Client
+# Gemini Client - Uses credentials from .streamlit/secrets.toml
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"]
 )
 
-# Streamlit UI
-st.title("AI-Powered Document Orchestrator")
-st.write(
-    "Upload a document, ask a question, and get AI-powered insights!"
-)
+# Streamlit UI Configuration
+st.set_page_config(page_title="AI Document Orchestrator", layout="wide")
+st.title("🚀 AI-Powered Document Orchestrator")
+st.markdown("---")
 
-# Upload + Query
-uploaded_file = st.file_uploader(
-    "Upload your document",
-    type=["pdf", "txt"]
-)
+# 1. Sidebar - File Upload and Query
+with st.sidebar:
+    st.header("Input Section")
+    uploaded_file = st.file_uploader(
+        "Upload document (PDF or TXT)", 
+        type=["pdf", "txt"]
+    )
+    user_query = st.text_input(
+        "What should the AI extract?", 
+        placeholder="e.g., Extract total amount and due date"
+    )
 
-user_query = st.text_input(
-    "Ask a question about the document"
-)
-
-# Function to extract text
+# Text Extraction Logic
 def extract_text(file):
-
     if file.type == "application/pdf":
-
         with pdfplumber.open(file) as pdf:
-
-            text = "\n".join(
-                page.extract_text() or ""
-                for page in pdf.pages
-            )
-
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         return text
-
     return file.read().decode("utf-8")
 
-
 # -------------------------
-# Stage 1 - Extract Data
+# STAGE 1: Gemini Extraction
 # -------------------------
 if uploaded_file and user_query:
-
-    if st.button("Extract Data"):
-
-        with st.spinner("Extracting data with Gemini..."):
-
+    if st.button("🔍 Step 1: Extract Data with Gemini"):
+        with st.spinner("Gemini is analyzing the document..."):
             try:
-
-                # Extract text
+                # Get text and limit to fit context window
                 doc_text = extract_text(uploaded_file)
+                limited_text = doc_text[:12000] 
 
-                # Limit text size
-                limited_text = doc_text[:10000]
-
-                # Prompt
                 prompt = f"""
-                Document:
+                Document Content:
                 {limited_text}
 
-                User Question:
+                User Instruction:
                 {user_query}
 
-                Extract the 5-8 most relevant key-value pairs
-                as JSON to answer the question.
-
-                Respond ONLY with a valid JSON object.
-
-                Example:
-                {{
-                    "key1": "value1",
-                    "key2": "value2"
-                }}
+                Task: Extract the 5-8 most relevant key-value pairs as JSON.
+                Respond ONLY with valid JSON.
                 """
 
-                # Gemini API Call
+                # FIXED: Updated model name to gemini-3-flash
                 response = client.models.generate_content(
-                    model="gemini-1.5-flash",
+                    model="gemini-3-flash",
                     contents=prompt
                 )
 
-                # Clean Gemini response
-                clean = (
-                    response.text
-                    .strip()
-                    .replace("```json", "")
-                    .replace("```", "")
-                )
-
-                # Convert to JSON safely
+                # Parsing response
+                clean_json = response.text.strip().replace("```json", "").replace("```", "")
                 try:
-                    extracted_json = json.loads(clean)
-
+                    extracted_json = json.loads(clean_json)
                 except:
-                    extracted_json = {
-                        "response": clean
-                    }
+                    extracted_json = {"raw_output": clean_json}
 
-                # Save data in session
+                # Store in session state for Stage 2
                 st.session_state["doc_text"] = doc_text
                 st.session_state["extracted_json"] = extracted_json
                 st.session_state["user_query"] = user_query
-
-                st.success("Data extraction completed!")
+                st.success("Extraction Successful!")
 
             except Exception as e:
-
-                st.error("Gemini API Error")
+                st.error("Failed to call Gemini API")
                 st.exception(e)
 
-        # Display extracted JSON
-        if "extracted_json" in st.session_state:
-
-            st.subheader(
-                "① Structured Data Extracted (JSON)"
-            )
-
-            st.json(
-                st.session_state["extracted_json"]
-            )
-
-
-# -------------------------
-# Stage 2 - Send to n8n
-# -------------------------
+# Display Output 1 (Structured Data)
 if "extracted_json" in st.session_state:
+    st.subheader("① Structured Data Extracted (JSON)")
+    st.json(st.session_state["extracted_json"])
+    st.markdown("---")
 
-    st.subheader("Send Alert Email via n8n")
+    # -------------------------
+    # STAGE 2: n8n Automation
+    # -------------------------
+    st.subheader("📬 Step 2: Trigger Automation & Analysis")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        recipient_email = st.text_input("Recipient Email for Alerts", placeholder="manager@company.com")
+    
+    with col2:
+        st.write("##") # Alignment
+        trigger_n8n = st.button("🚀 Send Alert Mail & Get Analysis")
 
-    recipient_email = st.text_input(
-        "Enter Recipient Email ID"
-    )
+    if trigger_n8n:
+        if not recipient_email:
+            st.warning("Please provide a recipient email.")
+        else:
+            with st.spinner("Executing n8n Workflow..."):
+                try:
+                    payload = {
+                        "text": st.session_state["doc_text"],
+                        "extracted_json": st.session_state["extracted_json"],
+                        "question": st.session_state["user_query"],
+                        "recipient_email": recipient_email
+                    }
 
-    if st.button("Send Alert Mail"):
-
-        with st.spinner("Sending to n8n..."):
-
-            try:
-
-                payload = {
-                    "text": st.session_state["doc_text"],
-                    "extracted_json": st.session_state["extracted_json"],
-                    "question": st.session_state["user_query"],
-                    "recipient_email": recipient_email
-                }
-
-                response = requests.post(
-                    st.secrets["N8N_WEBHOOK_URL"],
-                    json=payload
-                )
-
-                result = response.json()
-
-                # Output 1
-                st.subheader(
-                    "② Final Analytical Answer"
-                )
-
-                st.write(
-                    result.get(
-                        "final_answer",
-                        "No answer returned"
+                    # Call n8n Webhook
+                    n8n_response = requests.post(
+                        st.secrets["N8N_WEBHOOK_URL"],
+                        json=payload
                     )
-                )
+                    result = n8n_response.json()
 
-                # Output 2
-                st.subheader(
-                    "③ Generated Email Body"
-                )
+                    # Output 2: Analytical Answer
+                    st.subheader("② Final Analytical Answer")
+                    st.info(result.get("final_answer", "No analysis provided by n8n."))
 
-                st.write(
-                    result.get(
-                        "email_body",
-                        "Email was not sent - condition not met"
-                    )
-                )
+                    # Output 3: Email Body
+                    st.subheader("③ Generated Email Body")
+                    st.code(result.get("email_body", "No email draft generated."), language="markdown")
 
-                # Output 3
-                st.subheader(
-                    "④ Email Automation Status"
-                )
+                    # Output 4: Status
+                    st.subheader("④ Email Automation Status")
+                    status = result.get("status", "Unknown")
+                    if "SENT" in status.upper():
+                        st.success(f"Status: {status}")
+                    else:
+                        st.warning(f"Status: {status}")
 
-                status = result.get(
-                    "status",
-                    "Unknown"
-                )
-
-                if "SENT" in status.upper():
-
-                    st.success(
-                        f"Alert Email Status: {status}"
-                    )
-
-                else:
-
-                    st.warning(
-                        f"Status: {status}"
-                    )
-
-            except Exception as e:
-
-                st.error("n8n Webhook Error")
-                st.exception(e)
+                except Exception as e:
+                    st.error("Error connecting to n8n Webhook")
+                    st.exception(e)
+else:
+    st.info("Upload a file and enter a query to begin.")
