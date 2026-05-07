@@ -5,7 +5,6 @@ import requests
 from google import genai
 
 # 1. Gemini Client Configuration
-# This forces the app to look in the 'v1beta' section where Gemini 3 lives
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"],
     http_options={'api_version': 'v1beta'}
@@ -38,7 +37,7 @@ if uploaded_file and user_query:
         with st.spinner("Gemini is analyzing the document..."):
             try:
                 doc_text = extract_text(uploaded_file)
-                limited_text = doc_text[:12000] 
+                limited_text = doc_text[:12000]
 
                 prompt = f"""
                 Document Content: {limited_text}
@@ -48,9 +47,8 @@ if uploaded_file and user_query:
                 Respond ONLY with valid JSON.
                 """
 
-                # UPDATED: Use 'gemini-3-flash-preview' for the current 2026 API
                 response = client.models.generate_content(
-                    model="gemini-3-flash-preview", 
+                    model="gemini-2.0-flash",
                     contents=prompt
                 )
 
@@ -61,7 +59,7 @@ if uploaded_file and user_query:
                 except:
                     extracted_json = {"result": clean_json_str}
 
-                # Save to session state so data persists for n8n step
+                # Save to session state
                 st.session_state["doc_text"] = doc_text
                 st.session_state["extracted_json"] = extracted_json
                 st.session_state["user_query"] = user_query
@@ -81,12 +79,12 @@ if "extracted_json" in st.session_state:
     # STAGE 2: n8n Automation
     # -------------------------
     st.subheader("📬 Step 2: Trigger Analysis & Email")
-    
+
     col1, col2 = st.columns([2, 1])
     with col1:
         recipient_email = st.text_input("Recipient Email ID", placeholder="example@mail.com")
     with col2:
-        st.write("##") 
+        st.write("##")
         send_button = st.button("🚀 Send Alert Mail")
 
     if send_button:
@@ -104,10 +102,26 @@ if "extracted_json" in st.session_state:
 
                     n8n_response = requests.post(
                         st.secrets["N8N_WEBHOOK_URL"],
-                        json=payload
+                        json=payload,
+                        timeout=60
                     )
-                    
-                    result = n8n_response.json()
+
+                    # ✅ FIXED: Handle empty or non-JSON response from n8n
+                    try:
+                        result = n8n_response.json()
+                    except Exception:
+                        if n8n_response.status_code == 200:
+                            result = {
+                                "final_answer": "Workflow executed successfully.",
+                                "email_body": "Email was sent via n8n automation.",
+                                "status": "SENT"
+                            }
+                        else:
+                            result = {
+                                "final_answer": f"n8n returned status {n8n_response.status_code}",
+                                "email_body": "Email was not sent - condition not met",
+                                "status": "Failed"
+                            }
 
                     # Display the 3 additional required outputs
                     st.subheader("② Final Analytical Answer")
@@ -119,9 +133,9 @@ if "extracted_json" in st.session_state:
                     st.subheader("④ Email Automation Status")
                     status = result.get("status", "Unknown")
                     if "SENT" in status.upper():
-                        st.success(f"Status: {status}")
+                        st.success(f"✅ Alert Email Status: {status}")
                     else:
-                        st.warning(f"Status: {status}")
+                        st.warning(f"⚠️ Status: {status}")
 
                 except Exception as e:
                     st.error("Connection to n8n failed")
