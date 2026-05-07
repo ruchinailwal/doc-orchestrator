@@ -5,7 +5,7 @@ import requests
 from google import genai
 
 # 1. Gemini Client Configuration
-# We use v1beta to ensure the gemini-3-flash model is recognized
+# This forces the app to look in the 'v1beta' section where Gemini 3 lives
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"],
     http_options={'api_version': 'v1beta'}
@@ -48,9 +48,9 @@ if uploaded_file and user_query:
                 Respond ONLY with valid JSON.
                 """
 
-                # Using 'models/' prefix to ensure API recognition
+                # UPDATED: Use 'gemini-3-flash-preview' for the current 2026 API
                 response = client.models.generate_content(
-                    model="models/gemini-3-flash",
+                    model="gemini-3-flash-preview", 
                     contents=prompt
                 )
 
@@ -61,7 +61,7 @@ if uploaded_file and user_query:
                 except:
                     extracted_json = {"result": clean_json_str}
 
-                # Save to session state
+                # Save to session state so data persists for n8n step
                 st.session_state["doc_text"] = doc_text
                 st.session_state["extracted_json"] = extracted_json
                 st.session_state["user_query"] = user_query
