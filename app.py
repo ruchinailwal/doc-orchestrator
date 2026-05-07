@@ -30,7 +30,7 @@ if uploaded_file and user_query:
             Example: {{"key1": "value1", "key2": "value2"}}
             """
             response = client.models.generate_content(
-                model="gemini-1.5-flash-8b",
+                model="gemini-1.5-flash-002",
                 contents=prompt
             )
             clean = response.text.strip().replace("```json","").replace("```","")
