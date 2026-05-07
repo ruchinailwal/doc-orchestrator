@@ -5,7 +5,7 @@ import requests
 from google import genai
 
 # 1. Gemini Client Configuration
-# Added http_options to use v1beta, which supports Gemini 3 models
+# We use v1beta to ensure the gemini-3-flash model is recognized
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"],
     http_options={'api_version': 'v1beta'}
@@ -22,7 +22,7 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Choose a PDF or TXT file", type=["pdf", "txt"])
     user_query = st.text_input("What information should I extract?", placeholder="e.g. Extract invoice total")
 
-# Helper function to extract text from files
+# Helper function to extract text
 def extract_text(file):
     if file.type == "application/pdf":
         with pdfplumber.open(file) as pdf:
@@ -37,21 +37,20 @@ if uploaded_file and user_query:
     if st.button("🔍 Step 1: Extract Data"):
         with st.spinner("Gemini is analyzing the document..."):
             try:
-                # Extract and prepare text
                 doc_text = extract_text(uploaded_file)
                 limited_text = doc_text[:12000] 
 
                 prompt = f"""
-                Document: {limited_text}
+                Document Content: {limited_text}
                 Instruction: {user_query}
                 
-                Return the 5-8 most relevant key-value pairs as a JSON object.
+                Task: Return the 5-8 most relevant key-value pairs as a JSON object.
                 Respond ONLY with valid JSON.
                 """
 
-                # Call Gemini 3 Flash
+                # Using 'models/' prefix to ensure API recognition
                 response = client.models.generate_content(
-                    model="gemini-3-flash",
+                    model="models/gemini-3-flash",
                     contents=prompt
                 )
 
@@ -62,7 +61,7 @@ if uploaded_file and user_query:
                 except:
                     extracted_json = {"result": clean_json_str}
 
-                # Save to session state so data persists for Stage 2
+                # Save to session state
                 st.session_state["doc_text"] = doc_text
                 st.session_state["extracted_json"] = extracted_json
                 st.session_state["user_query"] = user_query
@@ -87,7 +86,7 @@ if "extracted_json" in st.session_state:
     with col1:
         recipient_email = st.text_input("Recipient Email ID", placeholder="example@mail.com")
     with col2:
-        st.write("##") # Spacing
+        st.write("##") 
         send_button = st.button("🚀 Send Alert Mail")
 
     if send_button:
@@ -103,13 +102,11 @@ if "extracted_json" in st.session_state:
                         "recipient_email": recipient_email
                     }
 
-                    # Send to n8n Webhook
                     n8n_response = requests.post(
                         st.secrets["N8N_WEBHOOK_URL"],
                         json=payload
                     )
                     
-                    # Ensure n8n returns valid JSON
                     result = n8n_response.json()
 
                     # Display the 3 additional required outputs
