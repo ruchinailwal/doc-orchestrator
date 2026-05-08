@@ -48,7 +48,7 @@ if uploaded_file and user_query:
                 """
 
                 response = client.models.generate_content(
-                    model="models/gemini-1.5-flash",
+                    model="gemini-1.5-flash-latest",
                     contents=prompt
                 )
 
