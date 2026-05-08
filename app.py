@@ -125,7 +125,9 @@ if "extracted_json" in st.session_state:
 
                     # Display the 3 additional required outputs
                     st.subheader("② Final Analytical Answer")
-                    st.info(result.get("final_answer", "No analysis returned."))
+                    # If result is a list, take the first item; otherwise use result as is
+                    data = result[0] if isinstance(result, list) else result
+                    st.info(data.get("final_answer", "No analysis returned."))
 
                     st.subheader("③ Generated Email Body")
                     st.text_area("Email Content", result.get("email_body", "No email drafted."), height=200)
