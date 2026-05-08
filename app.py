@@ -4,10 +4,10 @@ import json
 import requests
 from google import genai
 
-# 1. Gemini Client Configuration
+# 1. Gemini Client Configuration - Updated for Stable v1 and Gemini 3.1
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"],
-    http_options={'api_version': 'v1beta'}
+    http_options={'api_version': 'v1'}
 )
 
 # UI Layout
@@ -106,7 +106,7 @@ if "extracted_json" in st.session_state:
                         timeout=60
                     )
 
-                    # ✅ FIXED: Handle empty or non-JSON response from n8n
+                    # ✅ Handle empty or non-JSON response from n8n
                     try:
                         result = n8n_response.json()
                     except Exception:
@@ -123,17 +123,18 @@ if "extracted_json" in st.session_state:
                                 "status": "Failed"
                             }
 
-                    # Display the 3 additional required outputs
+                    # --- FIXED: Display Logic for List Data ---
+                    # 1. Ensure we have a dictionary 'data' even if n8n returns a list
+                    data = result[0] if isinstance(result, list) and len(result) > 0 else result
+
                     st.subheader("② Final Analytical Answer")
-                    # If result is a list, take the first item; otherwise use result as is
-                    data = result[0] if isinstance(result, list) else result
                     st.info(data.get("final_answer", "No analysis returned."))
 
                     st.subheader("③ Generated Email Body")
-                    st.text_area("Email Content", result.get("email_body", "No email drafted."), height=200)
+                    st.text_area("Email Content", data.get("email_body", "No email drafted."), height=200)
 
                     st.subheader("④ Email Automation Status")
-                    status = result.get("status", "Unknown")
+                    status = data.get("status", "Unknown")
                     if "SENT" in status.upper():
                         st.success(f"✅ Alert Email Status: {status}")
                     else:
