@@ -254,21 +254,20 @@ if "extracted_json" in st.session_state:
 
                     # If result is a list, take the first item; otherwise use result as is
 
+                    # 1. Handle the list/dict discrepancy safely
                     data = result[0] if isinstance(result, list) else result
 
+                    # 2. Final Analytical Answer (Corrected)
                     st.info(data.get("final_answer", "No analysis returned."))
 
+                    st.subheader("② Generated Email Body")
+                    # Use 'data' instead of 'result' here
+                    st.text_area("Email Content", data.get("email_body", "No email drafted."), height=200)
 
-
-                    st.subheader("③ Generated Email Body")
-
-                    st.text_area("Email Content", result.get("email_body", "No email drafted."), height=200)
-
-
-
-                    st.subheader("④ Email Automation Status")
-
-                    status = result.get("status", "Unknown")
+                    st.subheader("③ Email Automation Status")
+                    # Use 'data' instead of 'result' here
+                    status = data.get("status", "Unknown")
+                    
 
                     if "SENT" in status.upper():
 
